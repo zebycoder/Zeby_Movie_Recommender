@@ -30,14 +30,23 @@ DATA_FILES = {
     'similarity': 'similarity.pkl'
 }
 
+# Update your requirements.txt to:
+"""
+streamlit>=1.29.0
+pandas>=2.2.0
+numpy>=2.0.0
+scikit-learn>=1.4.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+"""
 
-# Helper functions
+# [Rest of your helper functions remain the same...]
+
 def convert(text):
     try:
         return [i['name'] for i in ast.literal_eval(text)]
     except:
         return []
-
 
 def get_director(crew):
     for person in ast.literal_eval(crew):
@@ -45,12 +54,9 @@ def get_director(crew):
             return person['name']
     return np.nan
 
-
 def collapse(L):
     return [i.replace(" ", "") for i in L]
 
-
-# Function to fetch movie poster with caching and error handling
 @lru_cache(maxsize=1000)
 def fetch_poster(movie_id):
     try:
@@ -64,8 +70,6 @@ def fetch_poster(movie_id):
         st.error(f"Error fetching poster: {str(e)}")
         return POSTER_PLACEHOLDER
 
-
-# Function to process data
 @st.cache_data
 def process_data():
     movies_df = pd.read_csv(DATA_FILES['movies'])
@@ -87,10 +91,10 @@ def process_data():
     movies_df['director'] = movies_df['director'].apply(lambda x: [x.replace(" ", "")])
 
     movies_df['tags'] = movies_df.apply(lambda row: ' '.join(row['overview'].split()) + ' ' +
-                                                    ' '.join(row['genres']) + ' ' +
-                                                    ' '.join(row['keywords']) + ' ' +
-                                                    ' '.join(row['cast']) + ' ' +
-                                                    ' '.join(row['director']), axis=1)
+                                                  ' '.join(row['genres']) + ' ' +
+                                                  ' '.join(row['keywords']) + ' ' +
+                                                  ' '.join(row['cast']) + ' ' +
+                                                  ' '.join(row['director']), axis=1)
 
     cv = CountVectorizer(max_features=5000, stop_words='english')
     vectors = cv.fit_transform(movies_df['tags']).toarray()
@@ -98,8 +102,6 @@ def process_data():
 
     return movies_df, similarity
 
-
-# Function to recommend movies with error handling
 def recommend(movie, _movies, _similarity, similarity_threshold=0.7):
     try:
         index = _movies[_movies['title'] == movie].index[0]
@@ -108,7 +110,7 @@ def recommend(movie, _movies, _similarity, similarity_threshold=0.7):
         recommended_movie_names = []
         recommended_movie_posters = []
 
-        for i in distances[1:6]:  # Get top 5 recommendations
+        for i in distances[1:6]:
             if i[1] < similarity_threshold:
                 continue
             movie_id = _movies.iloc[i[0]].movie_id
@@ -117,7 +119,6 @@ def recommend(movie, _movies, _similarity, similarity_threshold=0.7):
             recommended_movie_names.append(_movies.iloc[i[0]].title)
 
         return recommended_movie_names, recommended_movie_posters
-
     except IndexError:
         st.error("Movie not found in database. Please try another title.")
         return [], []
@@ -125,12 +126,9 @@ def recommend(movie, _movies, _similarity, similarity_threshold=0.7):
         st.error(f"An error occurred: {str(e)}")
         return [], []
 
-
-# Main app function
 def main():
     st.title('🎬 Movie Recommender System')
 
-    # Load data with caching
     @st.cache_resource
     def load_data():
         try:
@@ -144,10 +142,8 @@ def main():
             pickle.dump(similarity, open(DATA_FILES['similarity'], 'wb'))
             return movies, similarity
 
-    # Load the data
     movies, similarity = load_data()
 
-    # Sidebar for additional controls
     with st.sidebar:
         st.header("Settings")
         similarity_threshold = st.slider(
@@ -166,7 +162,6 @@ def main():
         3. Get 5 similar movies with posters
         """)
 
-    # Main content
     col1, col2 = st.columns([1, 3])
 
     with col1:
@@ -177,7 +172,6 @@ def main():
     with col2:
         search_query = st.text_input("Search for a movie", help="Start typing to filter movies")
 
-    # Movie selection
     if search_query:
         filtered_movies = [m for m in movies['title'].values if search_query.lower() in m.lower()]
         if not filtered_movies:
@@ -193,11 +187,10 @@ def main():
             movies['title'].values
         )
 
-    # Show recommendations
     if st.button('🎥 Show Recommendations', type="primary"):
         with st.spinner('Finding similar movies...'):
             recommended_movie_names, recommended_movie_posters = recommend(selected_movie, movies, similarity,
-                                                                           similarity_threshold)
+                                                                         similarity_threshold)
 
         if not recommended_movie_names:
             st.warning("No sufficiently similar movies found. Try lowering the similarity threshold.")
@@ -212,7 +205,6 @@ def main():
                         caption=recommended_movie_names[i]
                     )
 
-    # Additional movie details
     with st.expander("ℹ About this movie"):
         try:
             movie_data = movies[movies['title'] == selected_movie].iloc[0]
@@ -229,14 +221,11 @@ def main():
         except:
             st.warning("Could not load additional details for this movie")
 
-    # Footer
     st.markdown("---")
     st.markdown("""
     *Data Source*: [The Movie Database (TMDB)](https://www.themoviedb.org/)  
     *Note*: This product uses the TMDB API but is not endorsed or certified by TMDB.
     """)
 
-
-# Run the app
-if _name_ == "_main_":
-    main()
+if __name__ == "__main__":
+    main()
