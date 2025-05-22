@@ -1,243 +1,120 @@
-import pandas as pd
-import numpy as np
 import pickle
+import numpy as np
 import streamlit as st
 import requests
+import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from scipy.sparse import csr_matrix
-import ast
 from functools import lru_cache
-import os
+
+# --- CONFIGURATION ---
+st.set_page_config(
+    page_title="Zeby Coder's Movie Magic",
+    page_icon="🎬",
+    layout="wide"
+)
 
 
-# ==============================================
-# DATA LOADING AND PREPARATION
-# ==============================================
-
-@st.cache_data
+# --- CACHING FOR MAXIMUM SPEED ---
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
-    """Load or prepare movie data"""
-    try:
-        # Try loading preprocessed files first
-        if os.path.exists('movies.pkl') and os.path.exists('similarity.npy'):
-            movies = pd.read_pickle('movies.pkl')
-            similarity = np.load('similarity.npy', allow_pickle=True)
-            return movies, similarity
+    movies = pickle.load(open('movie_list.pkl', 'rb'))
+    similarity = pickle.load(open('similarity.pkl', 'rb'))
+    return movies, similarity
 
-        # If no files exist, prepare data
-        st.warning("Preparing data for first-time use...")
-        return prepare_data()
-
-    except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
-        st.stop()
-
-
-def prepare_data():
-    """Process raw data and create recommendation files"""
-    try:
-        # Load raw data
-        movies = pd.read_csv('tmdb_5000_movies.csv')
-        credits = pd.read_csv('tmdb_5000_credits.csv')
-
-        # Merge and clean data
-        movies = movies.merge(credits, on='title')
-        movies = movies[['movie_id', 'title', 'overview', 'genres', 'keywords', 'cast', 'crew']]
-        movies.dropna(inplace=True)
-
-        # Convert stringified lists to actual lists
-        def convert(obj):
-            try:
-                return [i['name'] for i in ast.literal_eval(obj)]
-            except:
-                return []
-
-        movies['genres'] = movies['genres'].apply(convert)
-        movies['keywords'] = movies['keywords'].apply(convert)
-        movies['cast'] = movies['cast'].apply(lambda x: [i['name'] for i in ast.literal_eval(x)][:3])
-        movies['crew'] = movies['crew'].apply(
-            lambda x: [i['name'] for i in ast.literal_eval(x) if i['job'] == 'Director'][:1])
-        movies['overview'] = movies['overview'].apply(lambda x: x.split())
-
-        # Create tags
-        movies['tags'] = movies['overview'] + movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
-        movies['tags'] = movies['tags'].apply(lambda x: " ".join(x).lower())
-        new_df = movies[['movie_id', 'title', 'tags']]
-
-        # Vectorization
-        cv = CountVectorizer(max_features=5000, stop_words='english')
-        vectors = cv.fit_transform(new_df['tags']).toarray()
-        similarity = cosine_similarity(vectors)
-
-        # Save processed data
-        new_df.to_pickle('movies.pkl')
-        np.save('similarity.npy', similarity)
-
-        return new_df, similarity
-
-    except Exception as e:
-        st.error(f"Error preparing data: {str(e)}")
-        st.stop()
-
-
-# ==============================================
-# MOVIE POSTER FETCHING
-# ==============================================
 
 @lru_cache(maxsize=1000)
 def fetch_poster(movie_id):
-    """Get movie poster from TMDB API"""
     try:
         url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US"
-        data = requests.get(url, timeout=5).json()
-        poster_path = data.get('poster_path')
-        return f"https://image.tmdb.org/t/p/w500/{poster_path}" if poster_path else None
+        return requests.get(url, timeout=2).json()['poster_path']
     except:
         return None
 
 
-# ==============================================
-# STREAMLIT APP UI
-# ==============================================
-
+# --- OPTIMIZED UI ---
 def main():
-    st.set_page_config(
-        page_title="Zeby AI - Movie Recommender",
-        page_icon="🎬",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    movies, similarity = load_data()
 
-    # Mobile-First CSS
+    # --- HIGH-CONTRAST THEME ---
     st.markdown("""
     <style>
-        :root {
-            --primary: #4e73df;
-            --secondary: #224abe;
+        .stApp {
+            background: #0F172A;
+            color: #E2E8F0;
         }
-
-        @media screen and (max-width: 768px) {
-            .st-emotion-cache-1v0mbdj {
-                width: 100% !important;
-            }
-            .recommendation-grid {
-                grid-template-columns: repeat(2, 1fr) !important;
-            }
-            .header-section {
-                padding: 1rem !important;
-            }
+        .sidebar .sidebar-content {
+            background: #1E293B !important;
         }
-
-        .header-section {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            padding: 2rem;
-            color: white;
+        .stTextInput input {
+            background: #1E293B !important;
+            color: white !important;
+        }
+        .stSelectbox select {
+            background: #1E293B !important;
+            color: white !important;
+        }
+        .stButton button {
+            background: #3B82F6 !important;
+            color: white !important;
+            font-weight: bold;
+            border: none;
+            width: 100%;
+        }
+        .contact-card {
+            background: #1E293B;
+            padding: 15px;
             border-radius: 10px;
-            margin-bottom: 1.5rem;
-        }
-
-        .recommendation-card {
-            transition: all 0.3s ease;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
-        }
-
-        .recommendation-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # Header
-    st.markdown("""
-    <div class="header-section">
-        <h1>Zeby AI Movie Recommender</h1>
-        <p>Advanced AI-Powered Recommendations</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Load data
-    movies, similarity = load_data()
-
-    # Main layout
-    col1, col2 = st.columns([1, 3], gap="medium")
-
-    with col1:
-        # Profile Section
+    # --- SIDEBAR (CLEAR VISIBILITY) ---
+    with st.sidebar:
         st.markdown("""
-        <div style="background: white; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem;">
-            <h3>Jahanzaib Javed</h3>
-            <p><b>📱 Phone:</b> +92-300-5590321</p>
-            <p><b>✉️ Email:</b> zeb.javed@outlook.com</p>
+        <div class="contact-card">
+            <h3 style="color: #3B82F6;">👨‍💻 Jahanzaib Javed</h3>
+            <p><b style="color: #94A3B8;">Company:</b> <span style="color: #E2E8F0;">Zeby Coder</span></p>
+            <p><b style="color: #94A3B8;">Phone:</b> <span style="color: #E2E8F0;">‪+92-300-5590321‬</span></p>
+            <p><b style="color: #94A3B8;">Location:</b> <span style="color: #E2E8F0;">Lahore, Pakistan</span></p>
         </div>
         """, unsafe_allow_html=True)
 
-        # Settings
-        threshold = st.slider(
-            "Similarity Threshold",
-            min_value=0.1,
-            max_value=1.0,
-            value=0.1,
-            step=0.05
-        )
+        threshold = st.slider("Similarity Threshold", 0.1, 1.0, 0.1, 0.05)
+        st.markdown("---")
+        st.caption("💡 Tip: Lower threshold = More recommendations")
 
-    with col2:
-        # Search Section
-        search_query = st.text_input("Search movies...", placeholder="Type a movie title")
-        movie_list = movies['title'].tolist()
-        if search_query:
-            movie_list = [m for m in movie_list if search_query.lower() in m.lower()]
+    # --- MAIN CONTENT ---
+    st.title("🎬 Zeby Coder Presents")
+    st.subheader("AI-Powered Movie Recommendations", divider="blue")
 
-        selected_movie = st.selectbox("Select a movie", movie_list if movie_list else ["No movies found"])
+    # Search & Selection
+    search_query = st.text_input("🔍 Search Movies", placeholder="Type a movie name...")
+    movie_list = movies['title'].tolist()
+    if search_query:
+        movie_list = [m for m in movie_list if search_query.lower() in m.lower()]
 
-        if st.button("Get Recommendations", type="primary"):
-            with st.spinner("Analyzing..."):
-                try:
-                    index = movies[movies['title'] == selected_movie].index[0]
-                    sim_scores = sorted(list(enumerate(similarity[index])), key=lambda x: x[1], reverse=True)[1:6]
+    selected_movie = st.selectbox("Select Movie", movie_list, index=0 if not search_query else None)
 
-                    st.markdown(f"""
-                    <div style="margin: 1.5rem 0;">
-                        <h3>🎯 Similar to: {selected_movie}</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
+    # Recommendations
+    if st.button("🎥 Get Recommendations", type="primary"):
+        with st.spinner("Finding matches..."):
+            index = movies[movies['title'] == selected_movie].index[0]
+            sim_scores = list(enumerate(similarity[index]))
+            sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)[1:6]
 
-                    # Responsive recommendations
-                    st.markdown(
-                        '<div class="recommendation-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5rem;">',
-                        unsafe_allow_html=True)
-
-                    cols = st.columns(5)
-                    for i, (idx, score) in enumerate(sim_scores):
-                        if score < threshold:
-                            continue
-
-                        movie = movies.iloc[idx]
-                        poster_url = fetch_poster(
-                            movie.movie_id) or "https://via.placeholder.com/300x450?text=No+Poster"
-
-                        with cols[i % 5]:
-                            st.markdown(f"""
-                            <div class="recommendation-card">
-                                <img src="{poster_url}" style="width:100%; border-radius:8px 8px 0 0;">
-                                <div style="padding: 1rem;">
-                                    <h4 style="margin: 0 0 0.5rem 0; text-align: center;">{movie.title}</h4>
-                                    <p style="margin: 0; text-align: center; color: var(--primary); font-weight: bold;">Similarity: {score:.2f}</p>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
+            cols = st.columns(5)
+            for i, (idx, score) in enumerate(sim_scores):
+                if score < threshold:
+                    continue
+                poster_path = fetch_poster(movies.iloc[idx].movie_id)
+                cols[i].image(
+                    f"https://image.tmdb.org/t/p/w500/{poster_path}" if poster_path else "https://via.placeholder.com/300x450?text=No+Poster",
+                    caption=movies.iloc[idx].title,
+                    use_column_width=True
+                )
 
 
-# ==============================================
-# APP ENTRY POINT
-# ==============================================
-if __name__ == "__main__":
-    main()
+if _name_ == "_main_":
+    main()
