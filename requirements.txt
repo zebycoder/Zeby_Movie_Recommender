@@ -1,5 +1,7 @@
-streamlit>=1.29.0
-pandas>=2.0.0
-numpy>=2.0.0  # Critical change - supports Python 3.13
-scikit-learn>=1.3.0
-requests>=2.31.0
+streamlit==1.29.0
+pandas==2.0.3
+numpy==2.0.0  # Critical for Python 3.13 compatibility
+scikit-learn==1.3.2
+requests==2.31.0
+streamlit-lottie==0.0.5
+python-dotenv==1.0.0
